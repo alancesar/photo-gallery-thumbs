@@ -79,7 +79,7 @@ func (t Thumbs) CreateThumbnails(ctx context.Context, filename string, metadata 
 
 		img := image.Image{
 			Reader:   resized,
-			Filename: createFilename(filename, targetDimension),
+			Filename: createFilename(filename, realDimension),
 			Type:     image.Thumb,
 			Metadata: image.Metadata{
 				ContentType: metadata.ContentType,
