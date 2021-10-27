@@ -6,8 +6,6 @@ import (
 	"github.com/disintegration/imaging"
 	"image"
 	"io"
-	"io/ioutil"
-	"os"
 )
 
 type ImagingProcessor struct{}
@@ -27,25 +25,12 @@ func (ImagingProcessor) Fit(reader io.Reader, dimension Dimension) (io.Reader, D
 	}
 
 	resized := imaging.Fit(decoded, dimension.Width, dimension.Height, imaging.Lanczos)
-	file, err := ioutil.TempFile("", "thumb.*.jpg")
-	if err != nil {
-		return nil, Dimension{}, err
-	}
-	defer func(f *os.File) {
-		_ = f.Close()
-		_ = os.Remove(f.Name())
-	}(file)
-
-	if err := imaging.Save(resized, file.Name()); err != nil {
+	buffer := bytes.NewBuffer(nil)
+	if err := imaging.Encode(buffer, resized, imaging.JPEG); err != nil {
 		return nil, Dimension{}, err
 	}
 
-	raw, err := io.ReadAll(file)
-	if err != nil {
-		return nil, Dimension{}, err
-	}
-
-	return io.NopCloser(bytes.NewBuffer(raw)), getDimensionFromRectangle(resized.Bounds()), nil
+	return buffer, getDimensionFromRectangle(resized.Bounds()), nil
 }
 
 func getDimensionFromRectangle(rectangle image.Rectangle) Dimension {
