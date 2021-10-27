@@ -136,5 +136,5 @@ func (t Thumbs) getThumbsFromDatabase(filename string) ([]image.Image, error) {
 func createFilename(filename string, dimension image.Dimension) string {
 	ext := filepath.Ext(filename)
 	filename = strings.TrimSuffix(filename, ext)
-	return fmt.Sprintf("%s_%dx%d%s", filename, dimension.Width, dimension.Height, ext)
+	return fmt.Sprintf("%s_%dx%d.jpeg", filename, dimension.Width, dimension.Height)
 }
