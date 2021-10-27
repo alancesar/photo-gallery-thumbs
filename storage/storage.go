@@ -27,6 +27,6 @@ func (s *Storage) Put(ctx context.Context, image image.Image) error {
 	return err
 }
 
-func (s *Storage) Get(ctx context.Context, filename string) (io.Reader, error) {
+func (s *Storage) Get(ctx context.Context, filename string) (io.ReadSeeker, error) {
 	return s.client.GetObject(ctx, s.bucket, filename, minio.GetObjectOptions{})
 }

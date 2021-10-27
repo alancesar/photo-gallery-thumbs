@@ -1,7 +1,6 @@
 package worker
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -14,7 +13,7 @@ import (
 
 type Storage interface {
 	Put(ctx context.Context, img image.Image) error
-	Get(ctx context.Context, filename string) (io.Reader, error)
+	Get(ctx context.Context, filename string) (io.ReadSeeker, error)
 }
 
 type Database interface {
@@ -60,22 +59,31 @@ func NewThumbsWorker(bundle Bundle) *Thumbs {
 }
 
 func (t Thumbs) CreateThumbnails(ctx context.Context, filename string, metadata image.Metadata) error {
-	raw, err := t.getRawData(ctx, filename)
+	item, err := t.photoStorage.Get(ctx, filename)
 	if err != nil {
 		return err
 	}
 
 	wg := sync.WaitGroup{}
 	wg.Add(len(t.dimensions))
+	mutex := sync.Mutex{}
 
-	worker := func(reader io.Reader, targetDimension image.Dimension) {
+	worker := func(item io.ReadSeeker, targetDimension image.Dimension) {
 		defer wg.Done()
 
-		resized, realDimension, err := t.processor.Fit(reader, targetDimension)
+		mutex.Lock()
+		_, err := item.Seek(0, 0)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
+
+		resized, realDimension, err := t.processor.Fit(item, targetDimension)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		mutex.Unlock()
 
 		img := image.Image{
 			Reader:   resized,
@@ -99,7 +107,7 @@ func (t Thumbs) CreateThumbnails(ctx context.Context, filename string, metadata 
 	}
 
 	for _, dimension := range t.dimensions {
-		go worker(io.NopCloser(bytes.NewBuffer(raw)), dimension)
+		go worker(item, dimension)
 	}
 
 	wg.Wait()
@@ -110,16 +118,6 @@ func (t Thumbs) CreateThumbnails(ctx context.Context, filename string, metadata 
 	}
 
 	return t.producer.Produce(filename, thumbs)
-}
-
-func (t Thumbs) getRawData(ctx context.Context, filename string) ([]byte, error) {
-	reader, err := t.photoStorage.Get(ctx, filename)
-	if err != nil {
-		return nil, err
-	}
-
-	raw, err := io.ReadAll(reader)
-	return raw, err
 }
 
 func (t Thumbs) getThumbsFromDatabase(filename string) ([]image.Image, error) {
