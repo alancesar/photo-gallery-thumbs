@@ -25,7 +25,7 @@ func (ImagingProcessor) Fit(reader io.Reader, dimension Dimension) (io.Reader, D
 	}
 
 	resized := imaging.Fit(decoded, dimension.Width, dimension.Height, imaging.Lanczos)
-	buffer := bytes.NewBuffer(nil)
+	buffer := new(bytes.Buffer)
 	if err := imaging.Encode(buffer, resized, imaging.JPEG); err != nil {
 		return nil, Dimension{}, err
 	}
