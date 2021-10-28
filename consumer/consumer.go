@@ -14,7 +14,7 @@ type Message struct {
 }
 
 type Worker interface {
-	CreateThumbnails(context.Context, string, image.Metadata) error
+	CreateThumbnails(context.Context, string) error
 }
 
 type Consumer struct {
@@ -32,5 +32,5 @@ func (c Consumer) Consume(ctx context.Context, event pubsub.Event) error {
 	if err := json.Unmarshal(event.Message, &message); err != nil {
 		return err
 	}
-	return c.worker.CreateThumbnails(ctx, message.Filename, message.Metadata)
+	return c.worker.CreateThumbnails(ctx, message.Filename)
 }

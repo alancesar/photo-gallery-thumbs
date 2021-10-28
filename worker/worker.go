@@ -12,6 +12,11 @@ import (
 	"sync"
 )
 
+const (
+	jpegExtension   = ".jpeg"
+	jpegContentType = "image/jpeg"
+)
+
 type Storage interface {
 	Put(ctx context.Context, img image.Image) error
 	Get(ctx context.Context, filename string) (io.ReadSeeker, error)
@@ -59,14 +64,8 @@ func NewThumbsWorker(bundle Bundle) *Thumbs {
 	}
 }
 
-func (t Thumbs) CreateThumbnails(ctx context.Context, filename string, metadata image.Metadata) error {
-	item, err := t.photoStorage.Get(ctx, filename)
-	if err != nil {
-		return err
-	}
-
-	largest := t.getLargestDimension()
-	sample, err := t.createSampleImg(item, largest)
+func (t Thumbs) CreateThumbnails(ctx context.Context, imgFilename string) error {
+	sample, err := t.getSampleImg(ctx, imgFilename)
 	if err != nil {
 		return err
 	}
@@ -75,39 +74,20 @@ func (t Thumbs) CreateThumbnails(ctx context.Context, filename string, metadata 
 	wg.Add(len(t.dimensions))
 	mutex := sync.Mutex{}
 
-	worker := func(item io.ReadSeeker, targetDimension image.Dimension) {
+	worker := func(item io.ReadSeeker, dimension image.Dimension) {
 		defer wg.Done()
 
 		mutex.Lock()
-		_, err := item.Seek(0, 0)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-
-		resized, realDimension, err := t.processor.Fit(item, targetDimension)
+		thumb, thumbDimension, err := t.resize(item, dimension)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 		mutex.Unlock()
 
-		img := image.Image{
-			Reader:   resized,
-			Filename: createFilename(filename, realDimension),
-			Type:     image.Thumb,
-			Metadata: image.Metadata{
-				ContentType: metadata.ContentType,
-				Dimension:   realDimension,
-			},
-		}
-
-		if err := t.thumbStorage.Put(ctx, img); err != nil {
-			fmt.Println(err)
-			return
-		}
-
-		if err := t.database.Create(filename, img); err != nil {
+		thumbFilename := createThumbFilename(imgFilename, thumbDimension)
+		img := createImgFromThumb(thumb, thumbFilename, thumbDimension)
+		if err := t.saveImg(ctx, imgFilename, img); err != nil {
 			fmt.Println(err)
 			return
 		}
@@ -119,12 +99,22 @@ func (t Thumbs) CreateThumbnails(ctx context.Context, filename string, metadata 
 
 	wg.Wait()
 
-	thumbs, err := t.getThumbsFromDatabase(filename)
+	thumbs, err := t.getThumbsFromDatabase(imgFilename)
 	if err != nil {
 		return err
 	}
 
-	return t.producer.Produce(filename, thumbs)
+	return t.producer.Produce(imgFilename, thumbs)
+}
+
+func (t Thumbs) getSampleImg(ctx context.Context, filename string) (io.ReadSeeker, error) {
+	item, err := t.photoStorage.Get(ctx, filename)
+	if err != nil {
+		return nil, err
+	}
+
+	largest := t.getLargestDimension()
+	return t.createSampleImg(item, largest)
 }
 
 func (t Thumbs) getLargestDimension() image.Dimension {
@@ -152,19 +142,47 @@ func (t Thumbs) createSampleImg(input io.Reader, dimension image.Dimension) (io.
 	return bytes.NewReader(content), err
 }
 
+func (t Thumbs) resize(item io.ReadSeeker, dimension image.Dimension) (io.Reader, image.Dimension, error) {
+	if _, err := item.Seek(0, 0); err != nil {
+		return nil, image.Dimension{}, err
+	}
+
+	return t.processor.Fit(item, dimension)
+}
+
 func (t Thumbs) getThumbsFromDatabase(filename string) ([]image.Image, error) {
 	thumbs, exists, err := t.database.FindByFilenameAndType(filename, image.Thumb)
 	if err != nil {
 		return nil, err
 	} else if !exists {
-		return nil, errors.New(fmt.Sprintf("Could not find thumbs for %s", filename))
+		return nil, errors.New(fmt.Sprintf("could not find thumbs for %s", filename))
 	}
 
 	return thumbs, err
 }
 
-func createFilename(filename string, dimension image.Dimension) string {
+func (t Thumbs) saveImg(ctx context.Context, filename string, img image.Image) error {
+	if err := t.thumbStorage.Put(ctx, img); err != nil {
+		return err
+	}
+
+	return t.database.Create(filename, img)
+}
+
+func createImgFromThumb(reader io.Reader, filename string, dimension image.Dimension) image.Image {
+	return image.Image{
+		Reader:   reader,
+		Filename: filename,
+		Type:     image.Thumb,
+		Metadata: image.Metadata{
+			ContentType: jpegContentType,
+			Dimension:   dimension,
+		},
+	}
+}
+
+func createThumbFilename(filename string, dimension image.Dimension) string {
 	ext := filepath.Ext(filename)
 	filename = strings.TrimSuffix(filename, ext)
-	return fmt.Sprintf("%s_%dx%d.jpeg", filename, dimension.Width, dimension.Height)
+	return fmt.Sprintf("%s_%dx%d%s", filename, dimension.Width, dimension.Height, jpegExtension)
 }
