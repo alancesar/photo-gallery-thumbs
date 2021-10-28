@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -64,6 +65,12 @@ func (t Thumbs) CreateThumbnails(ctx context.Context, filename string, metadata 
 		return err
 	}
 
+	largest := t.getLargestDimension()
+	sample, err := t.createSampleImg(item, largest)
+	if err != nil {
+		return err
+	}
+
 	wg := sync.WaitGroup{}
 	wg.Add(len(t.dimensions))
 	mutex := sync.Mutex{}
@@ -107,7 +114,7 @@ func (t Thumbs) CreateThumbnails(ctx context.Context, filename string, metadata 
 	}
 
 	for _, dimension := range t.dimensions {
-		go worker(item, dimension)
+		go worker(sample, dimension)
 	}
 
 	wg.Wait()
@@ -118,6 +125,31 @@ func (t Thumbs) CreateThumbnails(ctx context.Context, filename string, metadata 
 	}
 
 	return t.producer.Produce(filename, thumbs)
+}
+
+func (t Thumbs) getLargestDimension() image.Dimension {
+	largest := image.Dimension{}
+	for _, dimension := range t.dimensions {
+		if dimension.Width > largest.Width {
+			largest = dimension
+		}
+	}
+
+	return largest
+}
+
+func (t Thumbs) createSampleImg(input io.Reader, dimension image.Dimension) (io.ReadSeeker, error) {
+	sample, _, err := t.processor.Fit(input, dimension)
+	if err != nil {
+		return nil, err
+	}
+
+	content, err := io.ReadAll(sample)
+	if err != nil {
+		return nil, err
+	}
+
+	return bytes.NewReader(content), err
 }
 
 func (t Thumbs) getThumbsFromDatabase(filename string) ([]image.Image, error) {
