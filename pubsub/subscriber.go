@@ -41,7 +41,8 @@ func (l Subscriber) Subscribe(ctx context.Context, consumer Consumer) error {
 		}
 
 		if err := consumer.Consume(ctx, event); err != nil {
-			return err
+			fmt.Println(err)
+			continue
 		}
 
 		_ = message.Ack(false)
