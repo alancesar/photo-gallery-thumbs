@@ -16,7 +16,7 @@ type Consumer interface {
 	Consume(ctx context.Context, event Event) error
 }
 
-func NewAmqpSubscriber(channel *amqp.Channel, queue amqp.Queue) *Subscriber {
+func NewSubscriber(channel *amqp.Channel, queue amqp.Queue) *Subscriber {
 	return &Subscriber{
 		channel: channel,
 		queue:   queue,

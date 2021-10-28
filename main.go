@@ -95,7 +95,7 @@ func main() {
 
 	db := image.NewDatabase(dbConnection)
 	dimensions := configs.Thumbs.Dimensions
-	publisher := pubsub.NewAmpqPublisher(channel, os.Getenv(workerExchangeNameEnv))
+	publisher := pubsub.NewPublisher(channel, os.Getenv(workerExchangeNameEnv))
 	bundle := worker.Bundle{
 		PhotoStorage: storage.NewMinioStorage(client, os.Getenv(photosBucketEnv)),
 		ThumbStorage: storage.NewMinioStorage(client, os.Getenv(thumbsBucketEnv)),
@@ -113,7 +113,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	go func() {
-		subscriber := pubsub.NewAmqpSubscriber(channel, queue)
+		subscriber := pubsub.NewSubscriber(channel, queue)
 		if err := subscriber.Subscribe(ctx, c); err != nil {
 			log.Println(err)
 		}

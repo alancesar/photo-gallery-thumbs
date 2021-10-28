@@ -9,7 +9,7 @@ type Publisher struct {
 	exchange string
 }
 
-func NewAmpqPublisher(channel *amqp.Channel, exchange string) *Publisher {
+func NewPublisher(channel *amqp.Channel, exchange string) *Publisher {
 	return &Publisher{
 		channel:  channel,
 		exchange: exchange,
