@@ -15,6 +15,7 @@ import (
 const (
 	jpegExtension   = ".jpeg"
 	jpegContentType = "image/jpeg"
+	thumbsProperty  = "thumbs"
 )
 
 type Storage interface {
@@ -32,7 +33,7 @@ type Processor interface {
 }
 
 type Producer interface {
-	Produce(filename string, images []image.Image) error
+	Produce(message image.Message) error
 }
 
 type Thumbs struct {
@@ -104,7 +105,11 @@ func (t Thumbs) CreateThumbnails(ctx context.Context, imgFilename string) error 
 		return err
 	}
 
-	return t.producer.Produce(imgFilename, thumbs)
+	return t.producer.Produce(image.Message{
+		Filename: imgFilename,
+		Property: thumbsProperty,
+		Payload:  thumbs,
+	})
 }
 
 func (t Thumbs) getSampleImg(ctx context.Context, filename string) (io.ReadSeeker, error) {

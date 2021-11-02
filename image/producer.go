@@ -6,14 +6,13 @@ import (
 )
 
 const (
-	eventType    = "WORKER"
-	contentType  = "application/json"
-	eventTypeKey = "event-type"
+	contentType = "application/json"
 )
 
-type message struct {
-	Filename string  `json:"filename"`
-	Images   []Image `json:"images"`
+type Message struct {
+	Filename string      `json:"filename"`
+	Property string      `json:"property"`
+	Payload  interface{} `json:"payload"`
 }
 
 type Publisher interface {
@@ -30,17 +29,13 @@ func NewProducer(publisher Publisher) *Producer {
 	}
 }
 
-func (p Producer) Produce(filename string, images []Image) error {
-	bytes, err := json.Marshal(&message{
-		Filename: filename,
-		Images:   images,
-	})
+func (p Producer) Produce(message Message) error {
+	bytes, err := json.Marshal(&message)
 	if err != nil {
 		return err
 	}
 
 	event := pubsub.Event{
-		Headers:     map[string]interface{}{eventTypeKey: eventType},
 		ContentType: contentType,
 		Message:     bytes,
 	}
