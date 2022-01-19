@@ -3,7 +3,6 @@ package worker
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"github.com/alancesar/photo-gallery/thumbs/image"
 	"io"
@@ -160,7 +159,7 @@ func (t Thumbs) getThumbsFromDatabase(filename string) ([]image.Image, error) {
 	if err != nil {
 		return nil, err
 	} else if !exists {
-		return nil, errors.New(fmt.Sprintf("could not find thumbs for %s", filename))
+		return nil, fmt.Errorf("could not find thumbs for %s", filename)
 	}
 
 	return thumbs, err

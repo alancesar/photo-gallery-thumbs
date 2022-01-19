@@ -9,30 +9,28 @@ import (
 
 type Subscriber struct {
 	channel *amqp.Channel
-	queue   amqp.Queue
 }
 
 type Consumer interface {
 	Consume(ctx context.Context, event Event) error
 }
 
-func NewSubscriber(channel *amqp.Channel, queue amqp.Queue) *Subscriber {
+func NewSubscriber(channel *amqp.Channel) *Subscriber {
 	return &Subscriber{
 		channel: channel,
-		queue:   queue,
 	}
 }
 
-func (l Subscriber) Subscribe(ctx context.Context, consumer Consumer) error {
-	delivery, err := listen(l.channel, l.queue)
+func (l Subscriber) Subscribe(ctx context.Context, queue string, consumer Consumer) error {
+	delivery, err := listen(l.channel, queue)
 	if err != nil {
 		return err
 	}
 
-	log.Printf("listening for %s", l.queue.Name)
+	log.Printf("listening for %s\n", queue)
 
 	for message := range delivery {
-		log.Printf(fmt.Sprintf("got a message from %s", l.queue.Name))
+		log.Printf("got a message from %s\n", queue)
 		event := Event{
 			ID:          message.MessageId,
 			Headers:     message.Headers,
@@ -51,9 +49,9 @@ func (l Subscriber) Subscribe(ctx context.Context, consumer Consumer) error {
 	return nil
 }
 
-func listen(channel *amqp.Channel, queue amqp.Queue) (<-chan amqp.Delivery, error) {
+func listen(channel *amqp.Channel, queue string) (<-chan amqp.Delivery, error) {
 	return channel.Consume(
-		queue.Name,
+		queue,
 		"",
 		false,
 		false,

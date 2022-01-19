@@ -24,22 +24,20 @@ import (
 )
 
 const (
-	dbHostEnv             = "DB_HOST"
-	dbUserEnv             = "DB_USER"
-	dbPasswordEnv         = "DB_PASSWORD"
-	dbNameEnv             = "DB_NAME"
-	dbPortEnv             = "DB_PORT"
-	minioEndpointEnv      = "MINIO_ENDPOINT"
-	minioRootUserEnv      = "MINIO_ROOT_USER"
-	minioRootPasswordEnv  = "MINIO_ROOT_PASSWORD"
-	photosBucketEnv       = "PHOTOS_BUCKET"
-	thumbsBucketEnv       = "THUMBS_BUCKET"
-	rabbitMQUrlEnv        = "RABBITMQ_URL"
-	queueNameEnv          = "QUEUE_NAME"
-	bucketExchangeNameEnv = "BUCKET_EXCHANGE_NAME"
-	workerExchangeNameEnv = "WORKER_EXCHANGE_NAME"
-	configFileEnv         = "CONFIG_FILE"
-	fanoutExchangeKind    = "fanout"
+	dbHostEnv            = "DB_HOST"
+	dbUserEnv            = "DB_USER"
+	dbPasswordEnv        = "DB_PASSWORD"
+	dbNameEnv            = "DB_NAME"
+	dbPortEnv            = "DB_PORT"
+	minioEndpointEnv     = "MINIO_ENDPOINT"
+	minioRootUserEnv     = "MINIO_ROOT_USER"
+	minioRootPasswordEnv = "MINIO_ROOT_PASSWORD"
+	photosBucketEnv      = "PHOTOS_BUCKET"
+	thumbsBucketEnv      = "THUMBS_BUCKET"
+	rabbitMQUrlEnv       = "RABBITMQ_URL"
+	queueNameEnv         = "QUEUE_NAME"
+	exchangeNameEnv      = "EXCHANGE_NAME"
+	configFileEnv        = "CONFIG_FILE"
 )
 
 func main() {
@@ -80,22 +78,9 @@ func main() {
 		_ = conn.Close()
 	}(channel)
 
-	if err := declareExchange(channel, os.Getenv(bucketExchangeNameEnv)); err != nil {
-		log.Fatalln(err)
-	}
-
-	if err := declareExchange(channel, os.Getenv(workerExchangeNameEnv)); err != nil {
-		log.Fatalln(err)
-	}
-
-	queue, err := declareAndBindQueue(channel, os.Getenv(queueNameEnv), os.Getenv(bucketExchangeNameEnv))
-	if err != nil {
-		log.Fatalln(err)
-	}
-
 	db := image.NewDatabase(dbConnection)
 	dimensions := configs.Thumbs.Dimensions
-	publisher := pubsub.NewPublisher(channel, os.Getenv(workerExchangeNameEnv))
+	publisher := pubsub.NewPublisher(channel, os.Getenv(exchangeNameEnv))
 	bundle := worker.Bundle{
 		PhotoStorage: storage.NewMinioStorage(client, os.Getenv(photosBucketEnv)),
 		ThumbStorage: storage.NewMinioStorage(client, os.Getenv(thumbsBucketEnv)),
@@ -113,8 +98,8 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	go func() {
-		subscriber := pubsub.NewSubscriber(channel, queue)
-		if err := subscriber.Subscribe(ctx, c); err != nil {
+		subscriber := pubsub.NewSubscriber(channel)
+		if err := subscriber.Subscribe(ctx, os.Getenv(queueNameEnv), c); err != nil {
 			log.Println(err)
 		}
 	}()
@@ -137,32 +122,4 @@ func main() {
 			log.Fatalln(ctx.Err())
 		}
 	}
-}
-
-func declareExchange(channel *amqp.Channel, exchangeName string) error {
-	return channel.ExchangeDeclare(
-		exchangeName,
-		fanoutExchangeKind,
-		true,
-		false,
-		false,
-		false,
-		nil,
-	)
-}
-
-func declareAndBindQueue(channel *amqp.Channel, queue, exchange string) (amqp.Queue, error) {
-	q, err := channel.QueueDeclare(
-		queue,
-		true,
-		false,
-		false,
-		false,
-		nil,
-	)
-	if err != nil {
-		return amqp.Queue{}, err
-	}
-
-	return q, channel.QueueBind(q.Name, "", exchange, false, nil)
 }
