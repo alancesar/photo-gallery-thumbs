@@ -8,13 +8,13 @@ import (
 	"io"
 )
 
-type ImagingProcessor struct{}
+type Processor struct{}
 
-func NewImagingProcessor() *ImagingProcessor {
-	return &ImagingProcessor{}
+func NewProcessor() *Processor {
+	return &Processor{}
 }
 
-func (ImagingProcessor) Fit(reader io.Reader, dimension Dimension) (io.Reader, Dimension, error) {
+func (Processor) Fit(reader io.Reader, dimension Dimension) (io.Reader, Dimension, error) {
 	decoded, err := imaging.Decode(reader)
 	if err != nil {
 		return nil, Dimension{}, err

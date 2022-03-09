@@ -2,7 +2,7 @@ package storage
 
 import (
 	"context"
-	"github.com/alancesar/photo-gallery/thumbs/image"
+	"github.com/alancesar/photo-gallery/thumbs/domain/image"
 	"github.com/minio/minio-go/v7"
 	"io"
 )
