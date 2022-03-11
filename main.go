@@ -23,13 +23,18 @@ const (
 	configFileEnv        = "CONFIG_FILE"
 	projectIDKey         = "PROJECT_ID"
 	thumbsSubscriptionID = "thumbs"
-	photosSubscriptionID = "photos"
+	workerSubscriptionID = "worker"
 )
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	configFile := os.Getenv(configFileEnv)
+	configFilePath := os.Getenv(configFileEnv)
+	configFile, err := os.Open(configFilePath)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
 	configs, err := config.Load(configFile)
 	if err != nil {
 		log.Fatalln(err)
@@ -48,12 +53,13 @@ func main() {
 
 	handle := storageClient.Bucket(fmt.Sprintf("%s.appspot.com", projectID))
 	photosBucket := bucket.New(handle)
-	imageProcessor := image.NewProcessor()
 
 	subscription := pubSubClient.Subscription(thumbsSubscriptionID)
-	topic := pubSubClient.Topic(photosSubscriptionID)
+	topic := pubSubClient.Topic(workerSubscriptionID)
 
 	p := publisher.New[thumbs.Thumbs](topic)
+
+	imageProcessor := image.NewProcessor()
 	uc := usecase.NewThumbs(photosBucket, imageProcessor, p)
 
 	signals := make(chan os.Signal, 1)
@@ -62,6 +68,7 @@ func main() {
 	go func() {
 		l := listener.New[photo.Photo](subscription)
 		if err := l.Listen(ctx, func(ctx context.Context, photo photo.Photo) error {
+			log.Printf("received %s", photo.Filename)
 			return uc.CreateThumbnails(ctx, photo.Filename, configs.Thumbs.Dimensions)
 		}); err != nil {
 			log.Println(err)

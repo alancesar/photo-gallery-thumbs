@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	photosDirectory = "/photos"
+	photosDirectory = "photos/"
 	jpegExtension   = ".jpeg"
 	jpegContentType = "image/jpeg"
 	eventTypeKey    = "event-type"
@@ -163,6 +163,6 @@ func createImageFromThumb(reader io.Reader, filename string, realDimension image
 func createThumbFilename(filename string, dimension image.Dimension) string {
 	ext := filepath.Ext(filename)
 	filename = strings.TrimSuffix(filename, ext)
-	_, filename, _ = strings.Cut(filename, photosDirectory)
+	filename = strings.TrimPrefix(filename, photosDirectory)
 	return fmt.Sprintf("thumbs/%s_%dx%d%s", filename, dimension.Width, dimension.Height, jpegExtension)
 }

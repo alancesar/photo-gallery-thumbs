@@ -3,7 +3,7 @@ package config
 import (
 	"github.com/alancesar/photo-gallery/thumbs/domain/image"
 	"gopkg.in/yaml.v2"
-	"os"
+	"io"
 )
 
 type Thumbs struct {
@@ -14,13 +14,8 @@ type Config struct {
 	Thumbs Thumbs `yaml:"thumbs"`
 }
 
-func Load(configFilepath string) (Config, error) {
-	file, err := os.ReadFile(configFilepath)
-	if err != nil {
-		return Config{}, err
-	}
-
+func Load(reader io.Reader) (Config, error) {
 	config := Config{}
-	err = yaml.Unmarshal(file, &config)
+	err := yaml.NewDecoder(reader).Decode(&config)
 	return config, err
 }
