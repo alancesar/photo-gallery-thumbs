@@ -8,10 +8,10 @@ import (
 	"github.com/alancesar/photo-gallery/thumbs/config"
 	"github.com/alancesar/photo-gallery/thumbs/domain/image"
 	"github.com/alancesar/photo-gallery/thumbs/domain/photo"
-	"github.com/alancesar/photo-gallery/thumbs/domain/thumbs"
 	"github.com/alancesar/photo-gallery/thumbs/internal/bucket"
 	"github.com/alancesar/photo-gallery/thumbs/internal/listener"
 	"github.com/alancesar/photo-gallery/thumbs/internal/publisher"
+	"github.com/alancesar/photo-gallery/thumbs/presenter/message"
 	"github.com/alancesar/photo-gallery/thumbs/usecase"
 	_ "github.com/joho/godotenv/autoload"
 	"log"
@@ -23,7 +23,7 @@ const (
 	configFileEnv        = "CONFIG_FILE"
 	projectIDKey         = "PROJECT_ID"
 	thumbsSubscriptionID = "thumbs"
-	workerSubscriptionID = "worker"
+	thumbsTopicID        = "thumbs"
 )
 
 func main() {
@@ -55,11 +55,10 @@ func main() {
 	photosBucket := bucket.New(handle)
 
 	subscription := pubSubClient.Subscription(thumbsSubscriptionID)
-	topic := pubSubClient.Topic(workerSubscriptionID)
-
-	p := publisher.New[thumbs.Thumbs](topic)
+	topic := pubSubClient.Topic(thumbsTopicID)
 
 	imageProcessor := image.NewProcessor()
+	p := publisher.New[message.Photo](topic)
 	uc := usecase.NewThumbs(photosBucket, imageProcessor, p)
 
 	signals := make(chan os.Signal, 1)
@@ -69,7 +68,7 @@ func main() {
 		l := listener.New[photo.Photo](subscription)
 		if err := l.Listen(ctx, func(ctx context.Context, photo photo.Photo) error {
 			log.Printf("received %s", photo.Filename)
-			return uc.CreateThumbnails(ctx, photo.Filename, configs.Thumbs.Dimensions)
+			return uc.CreateThumbnails(ctx, photo.ID, photo.Filename, configs.Thumbs.Dimensions)
 		}); err != nil {
 			log.Println(err)
 		}

@@ -17,7 +17,7 @@ func New[T any](topic *pubsub.Topic) *Publisher[T] {
 	}
 }
 
-func (p Publisher[T]) Publish(ctx context.Context, data T, attributes map[string]string) {
+func (p Publisher[T]) Publish(ctx context.Context, data T) {
 	bytes, err := json.Marshal(data)
 	if err != nil {
 		log.Println(err)
@@ -25,7 +25,6 @@ func (p Publisher[T]) Publish(ctx context.Context, data T, attributes map[string
 	}
 
 	p.topic.Publish(ctx, &pubsub.Message{
-		Data:       bytes,
-		Attributes: attributes,
+		Data: bytes,
 	})
 }

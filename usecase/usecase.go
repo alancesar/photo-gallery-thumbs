@@ -5,20 +5,18 @@ import (
 	"context"
 	"fmt"
 	"github.com/alancesar/photo-gallery/thumbs/domain/image"
-	"github.com/alancesar/photo-gallery/thumbs/domain/thumbs"
+	"github.com/alancesar/photo-gallery/thumbs/presenter/message"
+	"golang.org/x/sync/errgroup"
 	"io"
 	"log"
 	"path/filepath"
 	"strings"
-	"sync"
 )
 
 const (
 	photosDirectory = "photos/"
 	jpegExtension   = ".jpeg"
 	jpegContentType = "image/jpeg"
-	eventTypeKey    = "event-type"
-	workerEventType = "WORKER"
 )
 
 type (
@@ -32,7 +30,7 @@ type (
 	}
 
 	Publisher interface {
-		Publish(ctx context.Context, thumbs thumbs.Thumbs, attributes map[string]string)
+		Publish(ctx context.Context, photo message.Photo)
 	}
 
 	Thumbs struct {
@@ -50,19 +48,21 @@ func NewThumbs(storage Storage, processor Processor, publisher Publisher) *Thumb
 	}
 }
 
-func (t Thumbs) CreateThumbnails(ctx context.Context, filename string, dimensions []image.Dimension) error {
+func (t Thumbs) CreateThumbnails(ctx context.Context, id, filename string, dimensions []image.Dimension) error {
 	sample, err := t.getSampleImg(ctx, filename, dimensions)
 	if err != nil {
 		return err
 	}
 
 	images := t.createImages(sample, filename, dimensions)
-	t.putOnStorage(ctx, images)
+	if err := t.putOnStorage(ctx, images); err != nil {
+		return err
+	}
 
-	t.publisher.Publish(ctx, thumbs.Thumbs{
-		Filename: filename,
-		Images:   images,
-	}, map[string]string{eventTypeKey: workerEventType})
+	t.publisher.Publish(ctx, message.Photo{
+		ID:     id,
+		Thumbs: images,
+	})
 
 	return nil
 }
@@ -131,22 +131,17 @@ func (t Thumbs) createThumb(seeker io.ReadSeeker, filename string, dimension ima
 	return createImageFromThumb(resized, filename, realDimension), nil
 }
 
-func (t Thumbs) putOnStorage(ctx context.Context, thumbnails []image.Image) {
-	wg := sync.WaitGroup{}
-	wg.Add(len(thumbnails))
-
+func (t Thumbs) putOnStorage(ctx context.Context, thumbnails []image.Image) error {
+	group, _ := errgroup.WithContext(ctx)
 	for _, thumb := range thumbnails {
-		go func(img image.Image) {
-			defer wg.Done()
+		worker := func() error {
+			return t.storage.Put(ctx, thumb)
+		}
 
-			if err := t.storage.Put(ctx, img); err != nil {
-				fmt.Println(err)
-				return
-			}
-		}(thumb)
+		group.Go(worker)
 	}
 
-	wg.Wait()
+	return group.Wait()
 }
 
 func createImageFromThumb(reader io.Reader, filename string, realDimension image.Dimension) image.Image {

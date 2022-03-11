@@ -5,6 +5,7 @@ import (
 )
 
 type Photo struct {
+	ID       string `json:"id"`
 	Filename string `json:"filename"`
 	image.Metadata
 }
