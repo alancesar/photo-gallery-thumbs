@@ -16,21 +16,6 @@ type Metadata struct {
 
 type Image struct {
 	Reader   io.Reader `json:"-"`
-	Type     Type      `json:"-"`
 	Filename string    `json:"filename"`
 	Metadata
-}
-
-type Images []Image
-
-func (i Images) GetByType(t Type) []Image {
-	var output []Image
-
-	for _, image := range i {
-		if image.Type == t {
-			output = append(output, image)
-		}
-	}
-
-	return output
 }
