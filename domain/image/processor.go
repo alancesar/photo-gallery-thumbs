@@ -41,7 +41,7 @@ func getDimensionFromRectangle(rectangle image.Rectangle) Dimension {
 }
 
 func validateDimensions(bounds image.Rectangle, dimension Dimension) error {
-	if dimension.Width > bounds.Dx() || dimension.Height > bounds.Dy() {
+	if dimension.Width > bounds.Dx() && dimension.Height > bounds.Dy() {
 		return fmt.Errorf("thumb size is larger then original image")
 	}
 
