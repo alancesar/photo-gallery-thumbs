@@ -7,12 +7,12 @@ import (
 
 type (
 	Image struct {
-		Reader io.Reader `json:"-"`
+		Reader io.Reader `json:"-" firestore:"-"`
 		metadata.Metadata
 	}
 
 	Thumbnail struct {
-		Filename string `json:"filename"`
+		Filename string `json:"filename" firestore:"filename"`
 		Image
 	}
 )

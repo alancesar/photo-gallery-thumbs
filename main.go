@@ -1,19 +1,18 @@
 package main
 
 import (
+	"cloud.google.com/go/firestore"
 	"cloud.google.com/go/pubsub"
 	"cloud.google.com/go/storage"
 	"context"
 	"fmt"
 	"github.com/alancesar/photo-gallery/worker/config"
-	"github.com/alancesar/photo-gallery/worker/domain/metadata"
 	"github.com/alancesar/photo-gallery/worker/domain/photo"
 	"github.com/alancesar/photo-gallery/worker/domain/thumb"
 	"github.com/alancesar/photo-gallery/worker/internal/bucket"
+	"github.com/alancesar/photo-gallery/worker/internal/database"
 	"github.com/alancesar/photo-gallery/worker/internal/extractor"
 	"github.com/alancesar/photo-gallery/worker/internal/listener"
-	"github.com/alancesar/photo-gallery/worker/internal/publisher"
-	"github.com/alancesar/photo-gallery/worker/presenter/message"
 	"github.com/alancesar/photo-gallery/worker/usecase"
 	_ "github.com/joho/godotenv/autoload"
 	"golang.org/x/sync/errgroup"
@@ -26,7 +25,6 @@ const (
 	configFileEnv        = "CONFIG_FILE"
 	projectIDKey         = "PROJECT_ID"
 	thumbsSubscriptionID = "thumbs"
-	thumbsTopicID        = "thumbs"
 )
 
 func main() {
@@ -54,6 +52,11 @@ func main() {
 		log.Fatalln(err)
 	}
 
+	firestoreClient, err := firestore.NewClient(ctx, projectID)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
 	handle := storageClient.Bucket(fmt.Sprintf("%s.appspot.com", projectID))
 	photosBucket := bucket.New(handle)
 
@@ -61,11 +64,10 @@ func main() {
 	thumbnailsUseCase := usecase.NewThumbnails(photosBucket, imageProcessor)
 	exifUseCase := usecase.NewExif(photosBucket, extractor.Exif)
 
-	topic := pubSubClient.Topic(thumbsTopicID)
-	p := publisher.New[message.Photo](topic)
-
 	subscription := pubSubClient.Subscription(thumbsSubscriptionID)
 	l := listener.New[photo.Photo](subscription)
+
+	db := database.NewFirestoreDatabase(firestoreClient)
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt)
@@ -73,35 +75,26 @@ func main() {
 	go func() {
 		if err := l.Listen(ctx, func(ctx context.Context, incoming photo.Photo) error {
 			log.Printf("received %s", incoming.Filename)
-			var (
-				exif   metadata.Exif
-				thumbs []thumb.Thumbnail
-			)
-
 			group, _ := errgroup.WithContext(ctx)
 			group.Go(func() error {
-				var err error
-				thumbs, err = thumbnailsUseCase.Execute(ctx, incoming.Filename, configs.Thumbs.Dimensions)
-				return err
+				thumbs, err := thumbnailsUseCase.Execute(ctx, incoming.Filename, configs.Thumbs.Dimensions)
+				if err != nil {
+					return err
+				}
+
+				return db.InsertThumbnails(ctx, incoming.ID, thumbs)
 			})
 
 			group.Go(func() error {
-				var err error
-				exif, err = exifUseCase.Execute(ctx, incoming.Filename)
-				return err
+				exif, err := exifUseCase.Execute(ctx, incoming.Filename)
+				if err != nil {
+					return err
+				}
+
+				return db.InsertExif(ctx, incoming.ID, exif)
 			})
 
-			if err := group.Wait(); err != nil {
-				return err
-			}
-
-			p.Publish(ctx, message.Photo{
-				ID:     incoming.ID,
-				Thumbs: thumbs,
-				Exif:   exif,
-			})
-
-			return nil
+			return group.Wait()
 		}); err != nil {
 			log.Println(err)
 		}
