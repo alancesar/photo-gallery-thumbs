@@ -1,14 +1,14 @@
 package usecase
 
 import (
-	"bytes"
 	"context"
+	"errors"
 	"fmt"
-	"github.com/alancesar/photo-gallery/thumbs/domain/photo"
-	"github.com/alancesar/photo-gallery/thumbs/presenter/message"
+	"github.com/alancesar/photo-gallery/thumbs/domain/metadata"
+	"github.com/alancesar/photo-gallery/thumbs/domain/thumb"
+	"github.com/alancesar/photo-gallery/thumbs/pkg"
 	"golang.org/x/sync/errgroup"
 	"io"
-	"log"
 	"path/filepath"
 	"strings"
 )
@@ -16,113 +16,72 @@ import (
 const (
 	photosDirectory = "photos/"
 	jpegExtension   = ".jpeg"
-	jpegContentType = "image/jpeg"
 )
 
 type (
-	Thumbs struct {
+	ThumbnailsWorker struct {
 		storage   Storage
 		processor Processor
-		publisher Publisher
 	}
 )
 
-func NewThumbnails(storage Storage, processor Processor, publisher Publisher) *Thumbs {
-	return &Thumbs{
+func NewThumbnails(storage Storage, processor Processor) *ThumbnailsWorker {
+	return &ThumbnailsWorker{
 		storage:   storage,
 		processor: processor,
-		publisher: publisher,
 	}
 }
 
-func (t Thumbs) Execute(ctx context.Context, id, filename string, dimensions []photo.Dimension) error {
-	sample, err := t.getSampleImg(ctx, filename, dimensions)
+func (t ThumbnailsWorker) Execute(ctx context.Context, filename string, dimensions []metadata.Dimension) ([]thumb.Thumbnail, error) {
+	original, err := t.storage.Get(ctx, filename)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	images := t.createImages(sample, filename, dimensions)
-	if err := t.putOnStorage(ctx, images); err != nil {
-		return err
+	largestDimension := metadata.GetLargestDimension(dimensions...)
+	sample, err := t.processor.FitAsReadSeeker(original, largestDimension)
+	if err != nil {
+		return nil, err
 	}
 
-	t.publisher.Publish(ctx, message.Photo{
-		ID:     id,
-		Thumbs: images,
-	})
+	thumbnails, err := t.generateThumbnails(sample, filename, dimensions)
+	if err != nil {
+		return nil, err
+	}
 
-	return nil
+	if err := t.putOnStorage(ctx, thumbnails); err != nil {
+		return nil, err
+	}
+
+	return thumbnails, nil
 }
 
-func (t Thumbs) getLargestDimension(dimensions []photo.Dimension) photo.Dimension {
-	largest := photo.Dimension{}
+func (t ThumbnailsWorker) generateThumbnails(seeker io.ReadSeeker, filename string, dimensions []metadata.Dimension) ([]thumb.Thumbnail, error) {
+	var thumbnails []thumb.Thumbnail
 	for _, dimension := range dimensions {
-		if dimension.Width > largest.Width {
-			largest = dimension
-		}
-	}
-
-	return largest
-}
-
-func (t Thumbs) getSampleImg(ctx context.Context, filename string, dimensions []photo.Dimension) (io.ReadSeeker, error) {
-	item, err := t.storage.Get(ctx, filename)
-	if err != nil {
-		return nil, err
-	}
-
-	largest := t.getLargestDimension(dimensions)
-	return t.createSampleImg(item, largest)
-}
-
-func (t Thumbs) createSampleImg(input io.Reader, dimension photo.Dimension) (io.ReadSeeker, error) {
-	sample, _, err := t.processor.Fit(input, dimension)
-	if err != nil {
-		return nil, err
-	}
-
-	content, err := io.ReadAll(sample)
-	if err != nil {
-		return nil, err
-	}
-
-	return bytes.NewReader(content), err
-}
-
-func (t Thumbs) createImages(item io.ReadSeeker, filename string, dimensions []photo.Dimension) []photo.Image {
-	var images []photo.Image
-	for _, dimension := range dimensions {
-		thumb, err := t.createThumb(item, filename, dimension)
+		resized, err := t.processor.FitFromReadSeeker(seeker, dimension)
 		if err != nil {
-			log.Println(err)
-			continue
+			if errors.Is(err, pkg.ErrInvalidThumbSize) {
+				continue
+			}
+
+			return nil, err
 		}
 
-		images = append(images, thumb)
+		thumbnails = append(thumbnails, thumb.Thumbnail{
+			Filename: createThumbFilename(filename, resized.Dimension),
+			Image:    resized,
+		})
 	}
 
-	return images
+	return thumbnails, nil
 }
 
-func (t Thumbs) createThumb(seeker io.ReadSeeker, filename string, dimension photo.Dimension) (photo.Image, error) {
-	_, err := seeker.Seek(0, 0)
-	if err != nil {
-		return photo.Image{}, err
-	}
-
-	resized, realDimension, err := t.processor.Fit(seeker, dimension)
-	if err != nil {
-		return photo.Image{}, err
-	}
-
-	return createImageFromThumb(resized, filename, realDimension), nil
-}
-
-func (t Thumbs) putOnStorage(ctx context.Context, thumbnails []photo.Image) error {
+func (t ThumbnailsWorker) putOnStorage(ctx context.Context, thumbnails []thumb.Thumbnail) error {
 	group, _ := errgroup.WithContext(ctx)
-	for _, thumb := range thumbnails {
+	for _, thumbnail := range thumbnails {
 		worker := func() error {
-			return t.storage.Put(ctx, thumb)
+			return t.storage.Put(ctx, thumbnail)
 		}
 
 		group.Go(worker)
@@ -131,18 +90,7 @@ func (t Thumbs) putOnStorage(ctx context.Context, thumbnails []photo.Image) erro
 	return group.Wait()
 }
 
-func createImageFromThumb(reader io.Reader, filename string, realDimension photo.Dimension) photo.Image {
-	return photo.Image{
-		Reader:   reader,
-		Filename: createThumbFilename(filename, realDimension),
-		Metadata: photo.Metadata{
-			ContentType: jpegContentType,
-			Dimension:   realDimension,
-		},
-	}
-}
-
-func createThumbFilename(filename string, dimension photo.Dimension) string {
+func createThumbFilename(filename string, dimension metadata.Dimension) string {
 	ext := filepath.Ext(filename)
 	filename = strings.TrimSuffix(filename, ext)
 	filename = strings.TrimPrefix(filename, photosDirectory)

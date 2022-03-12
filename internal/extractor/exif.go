@@ -1,12 +1,12 @@
-package metadata
+package extractor
 
 import (
 	"errors"
-	"github.com/alancesar/photo-gallery/thumbs/domain/photo"
+	"github.com/alancesar/photo-gallery/thumbs/domain/metadata"
 	"github.com/dsoprea/go-exif/v3"
 )
 
-func ExtractExif(bytes []byte) (photo.Exif, error) {
+func Exif(bytes []byte) (metadata.Exif, error) {
 	rawExif, err := exif.SearchAndExtractExif(bytes)
 	if err != nil {
 		if errors.Is(err, exif.ErrNoExif) {
@@ -21,9 +21,9 @@ func ExtractExif(bytes []byte) (photo.Exif, error) {
 		return nil, err
 	}
 
-	ex := photo.Exif{}
+	ex := metadata.Exif{}
 	for _, entry := range entries {
-		ex.SetTag(entry.IfdPath, entry.TagName, photo.Tag{
+		ex.SetTag(entry.IfdPath, entry.TagName, metadata.Tag{
 			ID:       entry.TagId,
 			TypeName: entry.TagTypeName,
 			Count:    entry.UnitCount,

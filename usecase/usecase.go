@@ -2,18 +2,20 @@ package usecase
 
 import (
 	"context"
-	"github.com/alancesar/photo-gallery/thumbs/domain/photo"
+	"github.com/alancesar/photo-gallery/thumbs/domain/metadata"
+	"github.com/alancesar/photo-gallery/thumbs/domain/thumb"
 	"github.com/alancesar/photo-gallery/thumbs/presenter/message"
 	"io"
 )
 
 type Storage interface {
-	Put(ctx context.Context, img photo.Image) error
+	Put(ctx context.Context, img thumb.Thumbnail) error
 	Get(ctx context.Context, filename string) (io.Reader, error)
 }
 
 type Processor interface {
-	Fit(reader io.Reader, dimension photo.Dimension) (io.Reader, photo.Dimension, error)
+	FitFromReadSeeker(io.ReadSeeker, metadata.Dimension) (thumb.Image, error)
+	FitAsReadSeeker(io.Reader, metadata.Dimension) (io.ReadSeeker, error)
 }
 
 type Publisher interface {

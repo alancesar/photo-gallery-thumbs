@@ -6,13 +6,17 @@ import (
 	"context"
 	"fmt"
 	"github.com/alancesar/photo-gallery/thumbs/config"
+	"github.com/alancesar/photo-gallery/thumbs/domain/metadata"
 	"github.com/alancesar/photo-gallery/thumbs/domain/photo"
+	"github.com/alancesar/photo-gallery/thumbs/domain/thumb"
 	"github.com/alancesar/photo-gallery/thumbs/internal/bucket"
+	"github.com/alancesar/photo-gallery/thumbs/internal/extractor"
 	"github.com/alancesar/photo-gallery/thumbs/internal/listener"
 	"github.com/alancesar/photo-gallery/thumbs/internal/publisher"
 	"github.com/alancesar/photo-gallery/thumbs/presenter/message"
 	"github.com/alancesar/photo-gallery/thumbs/usecase"
 	_ "github.com/joho/godotenv/autoload"
+	"golang.org/x/sync/errgroup"
 	"log"
 	"os"
 	"os/signal"
@@ -53,21 +57,51 @@ func main() {
 	handle := storageClient.Bucket(fmt.Sprintf("%s.appspot.com", projectID))
 	photosBucket := bucket.New(handle)
 
-	subscription := pubSubClient.Subscription(thumbsSubscriptionID)
-	topic := pubSubClient.Topic(thumbsTopicID)
+	imageProcessor := thumb.NewProcessor()
+	thumbnailsUseCase := usecase.NewThumbnails(photosBucket, imageProcessor)
+	exifUseCase := usecase.NewExif(photosBucket, extractor.Exif)
 
-	imageProcessor := photo.NewProcessor()
+	topic := pubSubClient.Topic(thumbsTopicID)
 	p := publisher.New[message.Photo](topic)
-	uc := usecase.NewThumbnails(photosBucket, imageProcessor, p)
+
+	subscription := pubSubClient.Subscription(thumbsSubscriptionID)
+	l := listener.New[photo.Photo](subscription)
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt)
 
 	go func() {
-		l := listener.New[photo.Photo](subscription)
-		if err := l.Listen(ctx, func(ctx context.Context, photo photo.Photo) error {
-			log.Printf("received %s", photo.Filename)
-			return uc.Execute(ctx, photo.ID, photo.Filename, configs.Thumbs.Dimensions)
+		if err := l.Listen(ctx, func(ctx context.Context, incoming photo.Photo) error {
+			log.Printf("received %s", incoming.Filename)
+			var (
+				exif   metadata.Exif
+				thumbs []thumb.Thumbnail
+			)
+
+			group, _ := errgroup.WithContext(ctx)
+			group.Go(func() error {
+				var err error
+				thumbs, err = thumbnailsUseCase.Execute(ctx, incoming.Filename, configs.Thumbs.Dimensions)
+				return err
+			})
+
+			group.Go(func() error {
+				var err error
+				exif, err = exifUseCase.Execute(ctx, incoming.Filename)
+				return err
+			})
+
+			if err := group.Wait(); err != nil {
+				return err
+			}
+
+			p.Publish(ctx, message.Photo{
+				ID:     incoming.ID,
+				Thumbs: thumbs,
+				Exif:   exif,
+			})
+
+			return nil
 		}); err != nil {
 			log.Println(err)
 		}

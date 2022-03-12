@@ -2,8 +2,7 @@ package usecase
 
 import (
 	"context"
-	"github.com/alancesar/photo-gallery/thumbs/domain/photo"
-	"io"
+	"github.com/alancesar/photo-gallery/thumbs/domain/metadata"
 )
 
 const (
@@ -11,7 +10,7 @@ const (
 )
 
 type (
-	ExifExtractor func([]byte) (photo.Exif, error)
+	ExifExtractor func([]byte) (metadata.Exif, error)
 
 	Exif struct {
 		storage   Storage
@@ -26,7 +25,12 @@ func NewExif(storage Storage, extractor ExifExtractor) *Exif {
 	}
 }
 
-func (e Exif) Execute(_ context.Context, reader io.Reader) (photo.Exif, error) {
+func (e Exif) Execute(ctx context.Context, filename string) (metadata.Exif, error) {
+	reader, err := e.storage.Get(ctx, filename)
+	if err != nil {
+		return nil, err
+	}
+
 	chunk := make([]byte, chunkSize)
 	if _, err := reader.Read(chunk); err != nil {
 		return nil, err
