@@ -59,7 +59,7 @@ func main() {
 
 	imageProcessor := image.NewProcessor()
 	p := publisher.New[message.Photo](topic)
-	uc := usecase.NewThumbs(photosBucket, imageProcessor, p)
+	uc := usecase.NewThumbnails(photosBucket, imageProcessor, p)
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt)
@@ -68,7 +68,7 @@ func main() {
 		l := listener.New[photo.Photo](subscription)
 		if err := l.Listen(ctx, func(ctx context.Context, photo photo.Photo) error {
 			log.Printf("received %s", photo.Filename)
-			return uc.CreateThumbnails(ctx, photo.ID, photo.Filename, configs.Thumbs.Dimensions)
+			return uc.Execute(ctx, photo.ID, photo.Filename, configs.Thumbs.Dimensions)
 		}); err != nil {
 			log.Println(err)
 		}
