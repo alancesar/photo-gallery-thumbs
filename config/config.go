@@ -1,7 +1,7 @@
 package config
 
 import (
-	"github.com/alancesar/photo-gallery/thumbs/domain/metadata"
+	"github.com/alancesar/photo-gallery/worker/domain/metadata"
 	"gopkg.in/yaml.v2"
 	"io"
 )

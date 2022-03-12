@@ -3,7 +3,7 @@ package bucket
 import (
 	"cloud.google.com/go/storage"
 	"context"
-	"github.com/alancesar/photo-gallery/thumbs/domain/thumb"
+	"github.com/alancesar/photo-gallery/worker/domain/thumb"
 	"io"
 )
 

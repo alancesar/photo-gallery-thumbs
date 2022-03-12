@@ -2,8 +2,8 @@ package thumb
 
 import (
 	"bytes"
-	"github.com/alancesar/photo-gallery/thumbs/domain/metadata"
-	"github.com/alancesar/photo-gallery/thumbs/pkg"
+	"github.com/alancesar/photo-gallery/worker/domain/metadata"
+	"github.com/alancesar/photo-gallery/worker/pkg"
 	"github.com/disintegration/imaging"
 	"image"
 	"io"

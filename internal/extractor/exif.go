@@ -2,7 +2,7 @@ package extractor
 
 import (
 	"errors"
-	"github.com/alancesar/photo-gallery/thumbs/domain/metadata"
+	"github.com/alancesar/photo-gallery/worker/domain/metadata"
 	"github.com/dsoprea/go-exif/v3"
 )
 

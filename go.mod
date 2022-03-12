@@ -1,4 +1,4 @@
-module github.com/alancesar/photo-gallery/thumbs
+module github.com/alancesar/photo-gallery/worker
 
 go 1.18
 

@@ -2,9 +2,9 @@ package usecase
 
 import (
 	"context"
-	"github.com/alancesar/photo-gallery/thumbs/domain/metadata"
-	"github.com/alancesar/photo-gallery/thumbs/domain/thumb"
-	"github.com/alancesar/photo-gallery/thumbs/presenter/message"
+	"github.com/alancesar/photo-gallery/worker/domain/metadata"
+	"github.com/alancesar/photo-gallery/worker/domain/thumb"
+	"github.com/alancesar/photo-gallery/worker/presenter/message"
 	"io"
 )
 
