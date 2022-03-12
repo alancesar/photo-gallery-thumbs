@@ -3,12 +3,8 @@ package bucket
 import (
 	"cloud.google.com/go/storage"
 	"context"
-	"github.com/alancesar/photo-gallery/thumbs/domain/image"
+	"github.com/alancesar/photo-gallery/thumbs/domain/photo"
 	"io"
-)
-
-const (
-	photosDirectoryName = "photos/"
 )
 
 type (
@@ -23,7 +19,7 @@ func New(handle *storage.BucketHandle) *Bucket {
 	}
 }
 
-func (s *Bucket) Put(ctx context.Context, image image.Image) error {
+func (s *Bucket) Put(ctx context.Context, image photo.Image) error {
 	writer := s.handle.Object(image.Filename).NewWriter(ctx)
 	if _, err := io.Copy(writer, image.Reader); err != nil {
 		return err

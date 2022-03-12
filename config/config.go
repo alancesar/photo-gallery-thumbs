@@ -1,13 +1,13 @@
 package config
 
 import (
-	"github.com/alancesar/photo-gallery/thumbs/domain/image"
+	"github.com/alancesar/photo-gallery/thumbs/domain/photo"
 	"gopkg.in/yaml.v2"
 	"io"
 )
 
 type Thumbs struct {
-	Dimensions []image.Dimension `yaml:"dimensions"`
+	Dimensions []photo.Dimension `yaml:"dimensions"`
 }
 
 type Config struct {

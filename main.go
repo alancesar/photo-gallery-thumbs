@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/alancesar/photo-gallery/thumbs/config"
-	"github.com/alancesar/photo-gallery/thumbs/domain/image"
 	"github.com/alancesar/photo-gallery/thumbs/domain/photo"
 	"github.com/alancesar/photo-gallery/thumbs/internal/bucket"
 	"github.com/alancesar/photo-gallery/thumbs/internal/listener"
@@ -57,7 +56,7 @@ func main() {
 	subscription := pubSubClient.Subscription(thumbsSubscriptionID)
 	topic := pubSubClient.Topic(thumbsTopicID)
 
-	imageProcessor := image.NewProcessor()
+	imageProcessor := photo.NewProcessor()
 	p := publisher.New[message.Photo](topic)
 	uc := usecase.NewThumbnails(photosBucket, imageProcessor, p)
 

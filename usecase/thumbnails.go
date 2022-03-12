@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/alancesar/photo-gallery/thumbs/domain/image"
+	"github.com/alancesar/photo-gallery/thumbs/domain/photo"
 	"github.com/alancesar/photo-gallery/thumbs/presenter/message"
 	"golang.org/x/sync/errgroup"
 	"io"
@@ -35,7 +35,7 @@ func NewThumbnails(storage Storage, processor Processor, publisher Publisher) *T
 	}
 }
 
-func (t Thumbs) Execute(ctx context.Context, id, filename string, dimensions []image.Dimension) error {
+func (t Thumbs) Execute(ctx context.Context, id, filename string, dimensions []photo.Dimension) error {
 	sample, err := t.getSampleImg(ctx, filename, dimensions)
 	if err != nil {
 		return err
@@ -54,8 +54,8 @@ func (t Thumbs) Execute(ctx context.Context, id, filename string, dimensions []i
 	return nil
 }
 
-func (t Thumbs) getLargestDimension(dimensions []image.Dimension) image.Dimension {
-	largest := image.Dimension{}
+func (t Thumbs) getLargestDimension(dimensions []photo.Dimension) photo.Dimension {
+	largest := photo.Dimension{}
 	for _, dimension := range dimensions {
 		if dimension.Width > largest.Width {
 			largest = dimension
@@ -65,7 +65,7 @@ func (t Thumbs) getLargestDimension(dimensions []image.Dimension) image.Dimensio
 	return largest
 }
 
-func (t Thumbs) getSampleImg(ctx context.Context, filename string, dimensions []image.Dimension) (io.ReadSeeker, error) {
+func (t Thumbs) getSampleImg(ctx context.Context, filename string, dimensions []photo.Dimension) (io.ReadSeeker, error) {
 	item, err := t.storage.Get(ctx, filename)
 	if err != nil {
 		return nil, err
@@ -75,7 +75,7 @@ func (t Thumbs) getSampleImg(ctx context.Context, filename string, dimensions []
 	return t.createSampleImg(item, largest)
 }
 
-func (t Thumbs) createSampleImg(input io.Reader, dimension image.Dimension) (io.ReadSeeker, error) {
+func (t Thumbs) createSampleImg(input io.Reader, dimension photo.Dimension) (io.ReadSeeker, error) {
 	sample, _, err := t.processor.Fit(input, dimension)
 	if err != nil {
 		return nil, err
@@ -89,8 +89,8 @@ func (t Thumbs) createSampleImg(input io.Reader, dimension image.Dimension) (io.
 	return bytes.NewReader(content), err
 }
 
-func (t Thumbs) createImages(item io.ReadSeeker, filename string, dimensions []image.Dimension) []image.Image {
-	var images []image.Image
+func (t Thumbs) createImages(item io.ReadSeeker, filename string, dimensions []photo.Dimension) []photo.Image {
+	var images []photo.Image
 	for _, dimension := range dimensions {
 		thumb, err := t.createThumb(item, filename, dimension)
 		if err != nil {
@@ -104,21 +104,21 @@ func (t Thumbs) createImages(item io.ReadSeeker, filename string, dimensions []i
 	return images
 }
 
-func (t Thumbs) createThumb(seeker io.ReadSeeker, filename string, dimension image.Dimension) (image.Image, error) {
+func (t Thumbs) createThumb(seeker io.ReadSeeker, filename string, dimension photo.Dimension) (photo.Image, error) {
 	_, err := seeker.Seek(0, 0)
 	if err != nil {
-		return image.Image{}, err
+		return photo.Image{}, err
 	}
 
 	resized, realDimension, err := t.processor.Fit(seeker, dimension)
 	if err != nil {
-		return image.Image{}, err
+		return photo.Image{}, err
 	}
 
 	return createImageFromThumb(resized, filename, realDimension), nil
 }
 
-func (t Thumbs) putOnStorage(ctx context.Context, thumbnails []image.Image) error {
+func (t Thumbs) putOnStorage(ctx context.Context, thumbnails []photo.Image) error {
 	group, _ := errgroup.WithContext(ctx)
 	for _, thumb := range thumbnails {
 		worker := func() error {
@@ -131,18 +131,18 @@ func (t Thumbs) putOnStorage(ctx context.Context, thumbnails []image.Image) erro
 	return group.Wait()
 }
 
-func createImageFromThumb(reader io.Reader, filename string, realDimension image.Dimension) image.Image {
-	return image.Image{
+func createImageFromThumb(reader io.Reader, filename string, realDimension photo.Dimension) photo.Image {
+	return photo.Image{
 		Reader:   reader,
 		Filename: createThumbFilename(filename, realDimension),
-		Metadata: image.Metadata{
+		Metadata: photo.Metadata{
 			ContentType: jpegContentType,
 			Dimension:   realDimension,
 		},
 	}
 }
 
-func createThumbFilename(filename string, dimension image.Dimension) string {
+func createThumbFilename(filename string, dimension photo.Dimension) string {
 	ext := filepath.Ext(filename)
 	filename = strings.TrimSuffix(filename, ext)
 	filename = strings.TrimPrefix(filename, photosDirectory)
