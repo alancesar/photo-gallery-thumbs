@@ -8,7 +8,6 @@ import (
 	"github.com/alancesar/photo-gallery/worker/domain/photo"
 	"github.com/alancesar/photo-gallery/worker/domain/thumb"
 	"github.com/alancesar/photo-gallery/worker/pkg"
-	"golang.org/x/sync/errgroup"
 	"io"
 	"path/filepath"
 	"strings"
@@ -85,16 +84,13 @@ func (t ThumbnailsWorker) generateThumbnails(seeker io.ReadSeeker, filename stri
 }
 
 func (t ThumbnailsWorker) putOnStorage(ctx context.Context, thumbnails []thumb.Thumbnail) error {
-	group, _ := errgroup.WithContext(ctx)
-	for _, thumbnail := range thumbnails {
-		worker := func() error {
-			return t.s.Put(ctx, thumbnail)
+	for index := range thumbnails {
+		if err := t.s.Put(ctx, thumbnails[index]); err != nil {
+			return err
 		}
-
-		group.Go(worker)
 	}
 
-	return group.Wait()
+	return nil
 }
 
 func createThumbFilename(filename string, dimension metadata.Dimension) string {
