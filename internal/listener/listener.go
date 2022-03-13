@@ -27,11 +27,13 @@ func (l Listener[T]) Listen(ctx context.Context, consumer Consumer[T]) error {
 	err := l.subscription.Receive(ctx, func(ctx context.Context, message *pubsub.Message) {
 		var data T
 		if err := json.Unmarshal(message.Data, &data); err != nil {
+			log.Println(err)
 			message.Ack()
 			return
 		}
 
 		if err := consumer(ctx, data); err != nil {
+			log.Println(err)
 			message.Nack()
 			return
 		}

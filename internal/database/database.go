@@ -3,14 +3,10 @@ package database
 import (
 	"cloud.google.com/go/firestore"
 	"context"
-	"github.com/alancesar/photo-gallery/worker/domain/metadata"
-	"github.com/alancesar/photo-gallery/worker/domain/thumb"
 )
 
 const (
 	photosCollectionName = "photos"
-	exifFieldName        = "exif"
-	thumbsFieldName      = "thumbs"
 )
 
 type (
@@ -25,27 +21,19 @@ func NewFirestoreDatabase(client *firestore.Client) *FirestoreDatabase {
 	}
 }
 
-func (d FirestoreDatabase) InsertExif(ctx context.Context, id string, exif metadata.Exif) error {
-	_, err := d.client.Collection(photosCollectionName).Doc(id).Update(ctx, []firestore.Update{
-		{
-			Path:  exifFieldName,
-			Value: exif,
-		},
-	})
-
+func (d FirestoreDatabase) Update(ctx context.Context, id string, fields map[string]interface{}) error {
+	cmd := createUpdateCommands(fields)
+	_, err := d.client.Collection(photosCollectionName).Doc(id).Update(ctx, cmd)
 	return err
 }
 
-func (d FirestoreDatabase) InsertThumbnails(ctx context.Context, id string, thumbs []thumb.Thumbnail) error {
-	_, err := d.client.
-		Collection(photosCollectionName).
-		Doc(id).
-		Update(ctx, []firestore.Update{
-			{
-				Path:  thumbsFieldName,
-				Value: thumbs,
-			},
+func createUpdateCommands(fields map[string]interface{}) []firestore.Update {
+	var cmd []firestore.Update
+	for k, v := range fields {
+		cmd = append(cmd, firestore.Update{
+			Path:  k,
+			Value: v,
 		})
-
-	return err
+	}
+	return cmd
 }

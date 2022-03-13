@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/alancesar/photo-gallery/worker/domain/metadata"
+	"github.com/alancesar/photo-gallery/worker/domain/photo"
 	"github.com/alancesar/photo-gallery/worker/domain/thumb"
 	"github.com/alancesar/photo-gallery/worker/pkg"
 	"golang.org/x/sync/errgroup"
@@ -14,52 +15,58 @@ import (
 )
 
 const (
-	photosDirectory = "photos/"
-	jpegExtension   = ".jpeg"
+	thumbnailsFieldName = "thumbs"
+	jpegExtension       = ".jpeg"
 )
 
 type (
 	ThumbnailsWorker struct {
-		storage   Storage
-		processor Processor
+		s  Storage
+		p  Processor
+		db Database
+		d  []metadata.Dimension
 	}
 )
 
-func NewThumbnails(storage Storage, processor Processor) *ThumbnailsWorker {
+func NewThumbnails(storage Storage, processor Processor, database Database, dimensions []metadata.Dimension) *ThumbnailsWorker {
 	return &ThumbnailsWorker{
-		storage:   storage,
-		processor: processor,
+		s:  storage,
+		p:  processor,
+		db: database,
+		d:  dimensions,
 	}
 }
 
-func (t ThumbnailsWorker) Execute(ctx context.Context, filename string, dimensions []metadata.Dimension) ([]thumb.Thumbnail, error) {
-	original, err := t.storage.Get(ctx, filename)
+func (t ThumbnailsWorker) Execute(ctx context.Context, photo photo.Photo) error {
+	original, err := t.s.Get(ctx, photo.Filename)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	largestDimension := metadata.GetLargestDimension(dimensions...)
-	sample, err := t.processor.FitAsReadSeeker(original, largestDimension)
+	largestDimension := metadata.GetLargestDimension(t.d...)
+	sample, err := t.p.FitAsReadSeeker(original, largestDimension)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	thumbnails, err := t.generateThumbnails(sample, filename, dimensions)
+	thumbnails, err := t.generateThumbnails(sample, photo.Filename, t.d)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if err := t.putOnStorage(ctx, thumbnails); err != nil {
-		return nil, err
+		return err
 	}
 
-	return thumbnails, nil
+	return t.db.Update(ctx, photo.ID, map[string]interface{}{
+		thumbnailsFieldName: thumbnails,
+	})
 }
 
 func (t ThumbnailsWorker) generateThumbnails(seeker io.ReadSeeker, filename string, dimensions []metadata.Dimension) ([]thumb.Thumbnail, error) {
 	var thumbnails []thumb.Thumbnail
 	for _, dimension := range dimensions {
-		resized, err := t.processor.FitFromReadSeeker(seeker, dimension)
+		resized, err := t.p.FitFromReadSeeker(seeker, dimension)
 		if err != nil {
 			if errors.Is(err, pkg.ErrInvalidThumbSize) {
 				continue
@@ -81,7 +88,7 @@ func (t ThumbnailsWorker) putOnStorage(ctx context.Context, thumbnails []thumb.T
 	group, _ := errgroup.WithContext(ctx)
 	for _, thumbnail := range thumbnails {
 		worker := func() error {
-			return t.storage.Put(ctx, thumbnail)
+			return t.s.Put(ctx, thumbnail)
 		}
 
 		group.Go(worker)
@@ -93,6 +100,6 @@ func (t ThumbnailsWorker) putOnStorage(ctx context.Context, thumbnails []thumb.T
 func createThumbFilename(filename string, dimension metadata.Dimension) string {
 	ext := filepath.Ext(filename)
 	filename = strings.TrimSuffix(filename, ext)
-	filename = strings.TrimPrefix(filename, photosDirectory)
+	filename = filepath.Base(filename)
 	return fmt.Sprintf("thumbs/%s_%dx%d%s", filename, dimension.Width, dimension.Height, jpegExtension)
 }

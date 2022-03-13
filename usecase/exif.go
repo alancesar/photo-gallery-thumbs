@@ -2,39 +2,72 @@ package usecase
 
 import (
 	"context"
+	"fmt"
 	"github.com/alancesar/photo-gallery/worker/domain/metadata"
+	"github.com/alancesar/photo-gallery/worker/domain/photo"
+	"io"
+	"os"
+	"path/filepath"
 )
 
 const (
-	chunkSize = 1024*128 - 1
+	exifFieldName = "exif"
 )
 
 type (
-	ExifExtractor func([]byte) (metadata.Exif, error)
+	ExifTool func(filename string) (metadata.Exif, error)
 
 	Exif struct {
-		storage   Storage
-		extractor ExifExtractor
+		s  Storage
+		e  ExifTool
+		db Database
 	}
 )
 
-func NewExif(storage Storage, extractor ExifExtractor) *Exif {
+func NewExif(storage Storage, tool ExifTool, database Database) *Exif {
 	return &Exif{
-		storage:   storage,
-		extractor: extractor,
+		s:  storage,
+		e:  tool,
+		db: database,
 	}
 }
 
-func (e Exif) Execute(ctx context.Context, filename string) (metadata.Exif, error) {
-	reader, err := e.storage.Get(ctx, filename)
+func (e Exif) Execute(ctx context.Context, photo photo.Photo) error {
+	reader, err := e.s.Get(ctx, photo.Filename)
+	if err != nil {
+		return err
+	}
+
+	file, err := createTempFile(photo.Filename)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(file, reader)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		_ = file.Close()
+		_ = os.Remove(file.Name())
+	}()
+
+	exif, err := e.e(file.Name())
+	if err != nil {
+		return err
+	}
+
+	return e.db.Update(ctx, photo.ID, map[string]interface{}{
+		exifFieldName: exif,
+	})
+}
+
+func createTempFile(filename string) (*os.File, error) {
+	base := filepath.Base(filename)
+	file, err := os.CreateTemp("", fmt.Sprintf("*_%s", base))
 	if err != nil {
 		return nil, err
 	}
-
-	chunk := make([]byte, chunkSize)
-	if _, err := reader.Read(chunk); err != nil {
-		return nil, err
-	}
-
-	return e.extractor(chunk)
+	return file, nil
 }
